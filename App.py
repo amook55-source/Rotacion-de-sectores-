@@ -7,7 +7,6 @@ st.set_page_config(page_title="Rotación de Sectores S&P 500", layout="wide")
 st.title("📊 Resumen de Rotación de Sectores S&P 500")
 st.markdown("Clasificación del flujo de dinero en los sectores del S&P 500 frente al **SPY**.")
 
-# Sectores con sus principales tickers componentes
 sectors = {
     "XLK": {
         "nombre": "Tecnología",
@@ -92,8 +91,8 @@ try:
             results.append({
                 "ETF": ticker,
                 "Sector": info["nombre"],
-                "Principales Acciones": info["tickers"],
-                "Fuerza Relativa": round(float(last_x), 2),
+                "Componentes": info["tickers"],
+                "Fuerza_Relativa": round(float(last_x), 2),
                 "Momentum": round(float(last_y), 2),
                 "Estado": quadrant
             })
@@ -109,7 +108,7 @@ try:
         for row in subset.itertuples():
             with st.container():
                 st.markdown(f"### 📌 **{row.ETF} - {row.Sector}**")
-                st.write(f"**Principales componentes:** `{row.Principales Acciones}`")
+                st.write(f"**Principales componentes:** `{row.Componentes}`")
                 st.markdown("---")
 
     st.subheader("📋 Tabla Completa de Datos")
@@ -117,3 +116,4 @@ try:
 
 except Exception as e:
     st.error(f"Error al cargar los datos de Yahoo Finance: {e}")
+    

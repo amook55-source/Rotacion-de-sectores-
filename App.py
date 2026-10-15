@@ -5,26 +5,60 @@ import pandas as pd
 st.set_page_config(page_title="Rotación de Sectores S&P 500", layout="wide")
 
 st.title("📊 Resumen de Rotación de Sectores S&P 500")
-st.markdown("Clasificación clara del flujo de dinero en los sectores comparados contra el **SPY**.")
+st.markdown("Clasificación del flujo de dinero en los sectores del S&P 500 frente al **SPY**.")
 
+# Sectores con sus principales tickers componentes
 sectors = {
-    "XLK": "Tecnología (AAPL/MSFT)",
-    "XLY": "Consumo Discrecional (AMZN/TSLA)",
-    "XLC": "Comunicaciones (META/GOOG)",
-    "XLF": "Financieros",
-    "XLI": "Industriales",
-    "XLE": "Energía (Petroleras)",
-    "XLB": "Materiales Básicos",
-    "XLV": "Salud (Pharma)",
-    "XLP": "Consumo Masivo",
-    "XLU": "Servicios Públicos",
-    "XLRE": "Real Estate"
+    "XLK": {
+        "nombre": "Tecnología",
+        "tickers": "AAPL, MSFT, NVDA, AVGO, ADBX, CRM, AMD, QCOM, INTC, IBM"
+    },
+    "XLY": {
+        "nombre": "Consumo Discrecional",
+        "tickers": "AMZN, TSLA, HD, MCD, NKE, LOW, SBUX, TJX, BKNG, CMG"
+    },
+    "XLC": {
+        "nombre": "Comunicaciones",
+        "tickers": "GOOGL, META, NFLX, DIS, CMCSA, T, VZ, EA, WBD, TTWO"
+    },
+    "XLF": {
+        "nombre": "Financieros",
+        "tickers": "BRK.B, JPM, V, MA, BAC, WFC, GS, MS, C, AXP"
+    },
+    "XLI": {
+        "nombre": "Industriales",
+        "tickers": "GE, CAT, UNP, RTX, HON, DE, LMT, BA, ETN, GD"
+    },
+    "XLE": {
+        "nombre": "Energía",
+        "tickers": "XOM, CVX, COP, EOG, SLB, MPC, PSX, VLO, WMB, KMI"
+    },
+    "XLB": {
+        "nombre": "Materiales Básicos",
+        "tickers": "LIN, SHW, FCX, APD, NEM, EMN, DOW, CTVA, PPG, CE"
+    },
+    "XLV": {
+        "nombre": "Salud",
+        "tickers": "LLY, UNH, JNJ, ABBV, MRK, TMO, PFE, ABT, AMGN, ISRG"
+    },
+    "XLP": {
+        "nombre": "Consumo Masivo",
+        "tickers": "WMT, PG, KO, PEP, COST, PM, MO, CL, MDLZ, TGT"
+    },
+    "XLU": {
+        "nombre": "Servicios Públicos",
+        "tickers": "NEE, SO, DUK, CEG, AEP, SRE, PCG, D, EIX, EXC"
+    },
+    "XLRE": {
+        "nombre": "Real Estate",
+        "tickers": "PLD, AMT, EQIX, CCI, SPG, O, Well, PSA, DLR, SBAC"
+    }
 }
 
 @st.cache_data(ttl=3600)
 def load_data():
-    tickers = ["SPY"] + list(sectors.keys())
-    data = yf.download(tickers, period="6mo", interval="1d", progress=False)['Close']
+    ticker_list = ["SPY"] + list(sectors.keys())
+    data = yf.download(ticker_list, period="6mo", interval="1d", progress=False)['Close']
     if isinstance(data.columns, pd.MultiIndex):
         data = data.droplevel(0, axis=1)
     return data
@@ -35,7 +69,7 @@ try:
 
     results = []
 
-    for ticker, name in sectors.items():
+    for ticker, info in sectors.items():
         if ticker in data.columns:
             sec_price = data[ticker]
             r = sec_price / spy
@@ -56,8 +90,9 @@ try:
                 quadrant = "🟣 Mejorando (Débiles pero repuntando)"
                 
             results.append({
-                "Ticker": ticker,
-                "Descripción": name,
+                "ETF": ticker,
+                "Sector": info["nombre"],
+                "Principales Acciones": info["tickers"],
                 "Fuerza Relativa": round(float(last_x), 2),
                 "Momentum": round(float(last_y), 2),
                 "Estado": quadrant
@@ -65,23 +100,20 @@ try:
 
     df_res = pd.DataFrame(results)
 
-    # Mostrar por pestañas o bloques limpios agrupados por estado
     estados = df_res["Estado"].unique()
 
     for estado in sorted(estados):
         st.subheader(estado)
         subset = df_res[df_res["Estado"] == estado]
         
-        # Mostramos en columnas o tarjetas simples
-        cols = st.columns(len(subset) if len(subset) > 0 else 1)
-        for i, row in enumerate(subset.itertuples()):
-            with cols[i % len(cols)]:
-                st.info(f"**{row.Ticker}**\n\n{row.Descripción}")
+        for row in subset.itertuples():
+            with st.container():
+                st.markdown(f"### 📌 **{row.ETF} - {row.Sector}**")
+                st.write(f"**Principales componentes:** `{row.Principales Acciones}`")
+                st.markdown("---")
 
-    st.markdown("---")
     st.subheader("📋 Tabla Completa de Datos")
     st.dataframe(df_res, use_container_width=True)
 
 except Exception as e:
     st.error(f"Error al cargar los datos de Yahoo Finance: {e}")
-    

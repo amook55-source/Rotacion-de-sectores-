@@ -17,9 +17,17 @@ st.markdown("""
         border: 1px solid #2d3748;
         margin-bottom: 8px;
     }
+    .info-card {
+        background-color: #161b22;
+        padding: 10px;
+        border-radius: 6px;
+        border-left: 3px solid #00cc96;
+        font-size: 12px;
+        color: #c9d1d9;
+        margin-bottom: 12px;
+    }
     .badge-green { color: #00cc96; font-weight: bold; }
     .badge-red { color: #ef553b; font-weight: bold; }
-    .badge-yellow { color: #fecb52; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,12 +81,10 @@ try:
     for ticker, info in sectors.items():
         if ticker in df.columns:
             sec_price = df[ticker]
-            # Cambio del día
             sec_1d = ((sec_price.iloc[-1] / sec_price.iloc[-2]) - 1) * 100
             if sec_1d > 0:
                 positive_sec_today += 1
 
-            # Rotación fuerza vs SPY
             r = sec_price / spy
             sma_r = r.rolling(window=14).mean()
             x = ((r / sma_r) - 1) * 100
@@ -105,12 +111,9 @@ try:
             })
     df_sec = pd.DataFrame(sec_results)
 
-    # CÁLCULO DE SALUD DEL MERCADO (REACTIVO A DÍAS CAÍDOS)
-    # Ponderamos: 40% sectores en verde hoy + 30% impacto diario SPY + 30% nivel VIX
     sec_ratio = (positive_sec_today / len(df_sec)) * 100 if len(df_sec) > 0 else 50
-    spy_score = max(0, min(100, (spy_1d + 3) * 16.6))  # -3% = 0, 0% = 50, +3% = 100
-    vix_score = max(0, min(100, (35 - vix_last) * 4))   # VIX 35 = 0, VIX 10 = 100
-
+    spy_score = max(0, min(100, (spy_1d + 3) * 16.6))
+    vix_score = max(0, min(100, (35 - vix_last) * 4))
     health_score = int((sec_ratio * 0.4) + (spy_score * 0.3) + (vix_score * 0.3))
 
     # 4. CÁLCULO DE STOCKS (MOVERS & MEDIAS MÓVILES)
@@ -164,7 +167,6 @@ try:
     with col_izq:
         st.subheader("⚡ Régimen & Amplitud de Mercado")
 
-        # Gauge Chart Reactivo
         gauge_color = "#00cc96" if health_score >= 60 else ("#ffa15a" if health_score >= 40 else "#ef553b")
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -187,11 +189,19 @@ try:
         fig_gauge.update_layout(height=220, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_gauge, use_container_width=True)
 
-        # Amplitud de Medias Móviles
+        # Amplitud de Medias Móviles con explicación clara
         st.markdown("**Amplitud Táctica (Megacaps)**")
         a1, a2 = st.columns(2)
-        a1.metric("Acciones > SMA 50", f"{pct_sma50}%")
-        a2.metric("Acciones > SMA 200", f"{pct_sma200}%")
+        a1.metric("Acciones > SMA 50", f"{pct_sma50}%", help="Corto/Mediano plazo: % de acciones arriba de su promedio de 50 ruedas.")
+        a2.metric("Acciones > SMA 200", f"{pct_sma200}%", help="Largo plazo: % de acciones arriba de su promedio de 200 ruedas (Tendencia estructural).")
+
+        st.markdown("""
+        <div class="info-card">
+        <b>📖 Guía Rápida de Amplitud:</b><br>
+        • <b>SMA 50:</b> Si está abajo del 50%, el mercado está corrigiendo a corto plazo.<br>
+        • <b>SMA 200:</b> Si está alto (>70%), la tendencia alcista general sigue firme.
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("---")
         st.subheader("📊 Rotación Sectorial Compacta")
@@ -211,7 +221,7 @@ try:
             },
             title="Fuerza Relativa por Sector vs SPY"
         )
-        fig_bar.update_layout(height=360, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10))
+        fig_bar.update_layout(height=360, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_bar, use_container_width=True)
 
     # ===== PANEL DERECHO: CARTELERA & LUPA POR SECTOR =====
@@ -247,7 +257,6 @@ try:
         st.markdown("---")
         st.subheader("🔍 Lupa Interactiva por Sector")
 
-        # Selector para inspeccionar sector
         selected_etf = st.selectbox(
             "Selecciona un sector para ver sus componentes:",
             options=list(sectors.keys()),
@@ -271,4 +280,4 @@ try:
 
 except Exception as e:
     st.error(f"Error cargando datos: {e}")
-    
+                

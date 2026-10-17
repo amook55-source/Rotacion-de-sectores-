@@ -12,15 +12,13 @@ st.markdown("""
     .stApp { background-color: #0e1117; color: #ffffff; }
     .card {
         background-color: #1a1f2c;
-        padding: 15px;
-        border-radius: 10px;
+        padding: 12px;
+        border-radius: 8px;
         border: 1px solid #2d3748;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
     .badge-green { color: #00cc96; font-weight: bold; }
     .badge-red { color: #ef553b; font-weight: bold; }
-    .badge-orange { color: #ffa15a; font-weight: bold; }
-    .badge-purple { color: #ab63fa; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,16 +66,12 @@ try:
             
             if lx >= 0 and ly >= 0:
                 cat = "Líderes"
-                color = "#00cc96"
             elif lx >= 0 and ly < 0:
                 cat = "Debilitándose"
-                color = "#ffa15a"
             elif lx < 0 and ly < 0:
                 cat = "Rezagados"
-                color = "#ef553b"
             else:
                 cat = "Mejorando"
-                color = "#ab63fa"
 
             sec_results.append({
                 "ETF": ticker,
@@ -85,7 +79,6 @@ try:
                 "Fuerza": round(float(lx), 2),
                 "Momentum": round(float(ly), 2),
                 "Estado": cat,
-                "Color": color,
                 "Componentes": info["tickers"]
             })
     df_sec = pd.DataFrame(sec_results)
@@ -97,24 +90,28 @@ try:
             last = df[s].iloc[-1]
             prev = df[s].iloc[-2]
             pct = ((last / prev) - 1) * 100
-            stock_changes.append({"Ticker": s, "Precio": round(last, 2), "Variación (%)": round(pct, 2)})
-    df_stocks = pd.DataFrame(stock_changes).sort_values(by="Variación (%)", ascending=False)
+            stock_changes.append({
+                "Ticker": s, 
+                "Precio": round(float(last), 2), 
+                "Variacion": round(float(pct), 2)
+            })
+    df_stocks = pd.DataFrame(stock_changes).sort_values(by="Variacion", ascending=False)
 
-    # TITULO Y ENCABEZADO
+    # TÍTULO PRINCIPAL
     st.title("🖥️ Terminal de Control & Rotación Sectorial")
     st.markdown("---")
 
-    # PANEL EN DOS COLUMNAS PRINCIPALES (Como en tu imagen)
+    # PANEL EN DOS COLUMNAS PRINCIPALES
     col_izq, col_der = st.columns([1, 1])
 
-    # ------------------ PANEL IZQUIERDO: RÉGIMEN Y SECTORES RESUMIDOS ------------------
+    # ------------------ PANEL IZQUIERDO ------------------
     with col_izq:
         st.subheader("⚡ Régimen de Mercado")
         
-        # Marcador circular / Gauge
-        # Calculamos un índice de salud rápido basado en sectores en verde
-        lideres_count = len(df_sec[df_sec["Estado"] == "Líderes"])
-        score = int((lideres_count / len(df_sec)) * 100) if len(df_sec) > 0 else 50
+        # Puntaje continuo de salud basado en la Fuerza Relativa promedio
+        avg_fuerza = df_sec["Fuerza"].mean()
+        # Normalizamos el puntaje entre 0 y 100
+        score = int(max(0, min(100, (avg_fuerza + 5) * 10)))
         
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -142,7 +139,6 @@ try:
         st.markdown("---")
         st.subheader("📊 Rotación Sectorial (Resumen Compacto)")
         
-        # Gráfico compacto de barras horizontales (Fuerza Relativa por Sector)
         fig_bar = px.bar(
             df_sec.sort_values(by="Fuerza", ascending=True),
             x="Fuerza",
@@ -161,7 +157,7 @@ try:
         fig_bar.update_layout(height=380, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # ------------------ PANEL DERECHO: CARTELERA Y MOVERS DEL DÍA ------------------
+    # ------------------ PANEL DERECHO ------------------
     with col_der:
         st.subheader("🔥 Cartelera del Día (Top Movers)")
         
@@ -171,10 +167,11 @@ try:
             st.markdown("##### 🚀 Top Ganadoras")
             gainers = df_stocks.head(5)
             for r in gainers.itertuples():
+                var_val = getattr(r, 'Variacion')
                 st.markdown(f"""
                 <div class="card">
                     <b>{r.Ticker}</b> | ${r.Precio}<br>
-                    <span class="badge-green">+{r.Variación:.2f}%</span>
+                    <span class="badge-green">+{var_val:.2f}%</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -182,15 +179,16 @@ try:
             st.markdown("##### 🔻 Top Perdedoras")
             losers = df_stocks.tail(5).iloc[::-1]
             for r in losers.itertuples():
+                var_val = getattr(r, 'Variacion')
                 st.markdown(f"""
                 <div class="card">
                     <b>{r.Ticker}</b> | ${r.Precio}<br>
-                    <span class="badge-red">{r.Variación:.2f}%</span>
+                    <span class="badge-red">{var_val:.2f}%</span>
                 </div>
                 """, unsafe_allow_html=True)
 
         st.markdown("---")
-        st.subheader("🗂️ Detalle Rápido por Categorías")
+        st.subheader("🗂️ Resumen por Categorías")
         
         for cat in ["Líderes", "Debilitándose", "Mejorando", "Rezagados"]:
             sub = df_sec[df_sec["Estado"] == cat]
@@ -200,3 +198,4 @@ try:
 
 except Exception as e:
     st.error(f"Error cargando datos: {e}")
+    

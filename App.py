@@ -28,6 +28,7 @@ st.markdown("""
     }
     .badge-green { color: #00cc96; font-weight: bold; }
     .badge-red { color: #ef553b; font-weight: bold; }
+    .badge-outperform { background-color: rgba(0, 204, 150, 0.2); color: #00cc96; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,6 +65,7 @@ try:
     spy_1d = ((spy_last / spy.iloc[-2]) - 1) * 100
     spy_1w = ((spy_last / spy.iloc[-6]) - 1) * 100
     spy_1m = ((spy_last / spy.iloc[-22]) - 1) * 100
+    spy_5d_ret = (spy.iloc[-1] / spy.iloc[-6]) - 1
 
     # 2. DATOS DEL VIX
     vix_last = df["^VIX"].iloc[-1] if "^VIX" in df.columns else 20.0
@@ -75,7 +77,7 @@ try:
         vix_status = "🔴 Pánico / Alta Volatilidad"
 
     # 3. CÁLCULO DE SECTORES Y SALUD REACTIVA
-    sec_results = []
+    sec_results = {}
     positive_sec_today = 0
 
     for ticker, info in sectors.items():
@@ -88,39 +90,24 @@ try:
             r = sec_price / spy
             sma_r = r.rolling(window=14).mean()
             x = ((r / sma_r) - 1) * 100
-            y = x.pct_change(periods=10) * 100
-            lx, ly = x.iloc[-1], y.iloc[-1]
+            lx = x.iloc[-1]
 
-            if lx >= 0 and ly >= 0:
-                cat = "Líderes"
-            elif lx >= 0 and ly < 0:
-                cat = "Debilitándose"
-            elif lx < 0 and ly < 0:
-                cat = "Rezagados"
-            else:
-                cat = "Mejorando"
+            sec_results[ticker] = {
+                "fuerza": round(float(lx), 2),
+                "var_1d": round(float(sec_1d), 2),
+                "nombre": info["nombre"]
+            }
 
-            sec_results.append({
-                "ETF": ticker,
-                "Nombre": info["nombre"],
-                "Fuerza": round(float(lx), 2),
-                "Momentum": round(float(ly), 2),
-                "Estado": cat,
-                "Var_1D": round(float(sec_1d), 2),
-                "Tickers": info["tickers"]
-            })
-    df_sec = pd.DataFrame(sec_results)
-
-    sec_ratio = (positive_sec_today / len(df_sec)) * 100 if len(df_sec) > 0 else 50
-    spy_score = max(0, min(100, (spy_1d + 3) * 16.6))
-    vix_score = max(0, min(100, (35 - vix_last) * 4))
-    health_score = int((sec_ratio * 0.4) + (spy_score * 0.3) + (vix_score * 0.3))
-
-    # 4. CÁLCULO DE STOCKS (MOVERS & MEDIAS MÓVILES)
-    stock_changes = []
+    # 4. CÁLCULO DE STOCKS (MOVERS, OUTPERFORM & SCORING)
+    stock_analysis = []
     above_sma50 = 0
     above_sma200 = 0
     valid_stocks = 0
+
+    stock_to_sector = {}
+    for etf, info in sectors.items():
+        for t in info["tickers"]:
+            stock_to_sector[t] = etf
 
     for s in top_stocks:
         if s in df.columns:
@@ -129,7 +116,10 @@ try:
                 valid_stocks += 1
                 last_p = s_series.iloc[-1]
                 prev_p = s_series.iloc[-2]
-                pct = ((last_p / prev_p) - 1) * 100
+                pct_1d = ((last_p / prev_p) - 1) * 100
+                
+                s_5d_ret = (s_series.iloc[-1] / s_series.iloc[-6]) - 1
+                is_outperformer = s_5d_ret > spy_5d_ret
 
                 sma50 = s_series.rolling(50).mean().iloc[-1]
                 sma200 = s_series.rolling(200).mean().iloc[-1]
@@ -139,15 +129,35 @@ try:
                 if last_p > sma200:
                     above_sma200 += 1
 
-                stock_changes.append({
+                # Scoring de Oportunidad (0 a 10)
+                score = 5
+                sec_key = stock_to_sector.get(s)
+                if sec_key and sec_key in sec_results:
+                    sec_fuerza = sec_results[sec_key]["fuerza"]
+                    if sec_fuerza > 2: score += 3
+                    elif sec_fuerza > 0: score += 1
+                    else: score -= 2
+                
+                if is_outperformer: score += 2
+                if pct_1d > 0: score += 1
+                score = max(0, min(10, score))
+
+                stock_analysis.append({
                     "Ticker": s,
                     "Precio": round(float(last_p), 2),
-                    "Variacion": round(float(pct), 2)
+                    "Variacion": round(float(pct_1d), 2),
+                    "Outperform": is_outperformer,
+                    "Score": score
                 })
 
-    df_stocks = pd.DataFrame(stock_changes).sort_values(by="Variacion", ascending=False)
+    df_stocks = pd.DataFrame(stock_analysis).sort_values(by="Variacion", ascending=False)
     pct_sma50 = int((above_sma50 / valid_stocks) * 100) if valid_stocks > 0 else 0
     pct_sma200 = int((above_sma200 / valid_stocks) * 100) if valid_stocks > 0 else 0
+
+    sec_ratio = (positive_sec_today / len(sectors)) * 100
+    spy_score = max(0, min(100, (spy_1d + 3) * 16.6))
+    vix_score = max(0, min(100, (35 - vix_last) * 4))
+    health_score = int((sec_ratio * 0.4) + (spy_score * 0.3) + (vix_score * 0.3))
 
     # ------------------ ENCABEZADO Y TENDENCIA SPY ------------------
     st.title("🖥️ Terminal de Control & Mercado")
@@ -163,7 +173,7 @@ try:
     # ------------------ PANEL EN DOS COLUMNAS ------------------
     col_izq, col_der = st.columns([1, 1])
 
-    # ===== PANEL IZQUIERDO: RÉGIMEN & AMPLITUD =====
+    # ===== PANEL IZQUIERDO =====
     with col_izq:
         st.subheader("⚡ Régimen & Amplitud de Mercado")
 
@@ -189,44 +199,54 @@ try:
         fig_gauge.update_layout(height=220, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_gauge, use_container_width=True)
 
-        # Amplitud de Medias Móviles con explicación clara
-        st.markdown("**Amplitud Táctica (Megacaps)**")
         a1, a2 = st.columns(2)
         a1.metric("Acciones > SMA 50", f"{pct_sma50}%", help="Corto/Mediano plazo: % de acciones arriba de su promedio de 50 ruedas.")
-        a2.metric("Acciones > SMA 200", f"{pct_sma200}%", help="Largo plazo: % de acciones arriba de su promedio de 200 ruedas (Tendencia estructural).")
+        a2.metric("Acciones > SMA 200", f"{pct_sma200}%", help="Largo plazo: % de acciones arriba de su promedio de 200 ruedas.")
 
         st.markdown("""
         <div class="info-card">
         <b>📖 Guía Rápida de Amplitud:</b><br>
-        • <b>SMA 50:</b> Si está abajo del 50%, el mercado está corrigiendo a corto plazo.<br>
-        • <b>SMA 200:</b> Si está alto (>70%), la tendencia alcista general sigue firme.
+        • <b>SMA 50:</b> Abajo del 50% indica corrección a corto plazo.<br>
+        • <b>SMA 200:</b> Arriba del 70% mantiene la tendencia alcista general.
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
-        st.subheader("📊 Rotación Sectorial Compacta")
+        st.subheader("📊 Rotación Sectorial (Semáforo de Fuerza)")
+
+        sec_list_chart = []
+        for etf, data_sec in sec_results.items():
+            sec_list_chart.append({
+                "ETF": f"{etf} ({data_sec['nombre']})",
+                "Fuerza": data_sec["fuerza"],
+                "Condicion": "Fuerte (Le gana al SPY)" if data_sec["fuerza"] >= 0 else "Débil (Cae más que SPY)"
+            })
+        df_sec_chart = pd.DataFrame(sec_list_chart).sort_values(by="Fuerza", ascending=True)
 
         fig_bar = px.bar(
-            df_sec.sort_values(by="Fuerza", ascending=True),
+            df_sec_chart,
             x="Fuerza",
             y="ETF",
-            color="Estado",
-            hover_data=["Nombre", "Var_1D"],
+            color="Condicion",
             orientation='h',
             color_discrete_map={
-                "Líderes": "#00cc96",
-                "Debilitándose": "#ffa15a",
-                "Rezagados": "#ef553b",
-                "Mejorando": "#ab63fa"
+                "Fuerte (Le gana al SPY)": "#00cc96",
+                "Débil (Cae más que SPY)": "#ef553b"
             },
             title="Fuerza Relativa por Sector vs SPY"
         )
-        fig_bar.update_layout(height=360, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)")
+        fig_bar.update_layout(
+            height=380, 
+            template="plotly_dark", 
+            margin=dict(l=10, r=10, t=30, b=10), 
+            paper_bgcolor="rgba(0,0,0,0)",
+            legend_title_text=""
+        )
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # ===== PANEL DERECHO: CARTELERA & LUPA POR SECTOR =====
+    # ===== PANEL DERECHO =====
     with col_der:
-        st.subheader("🔥 Cartelera del Día (Top Movers)")
+        st.subheader("🔥 Cartelera del Día & Scoring")
 
         g_col, l_col = st.columns(2)
 
@@ -234,11 +254,11 @@ try:
             st.markdown("##### 🚀 Top Ganadoras")
             gainers = df_stocks.head(5)
             for r in gainers.itertuples():
-                v = getattr(r, 'Variacion')
+                badge = '<span class="badge-outperform">⚡ Outperformer</span>' if r.Outperform else ''
                 st.markdown(f"""
                 <div class="card">
-                    <b>{r.Ticker}</b> | ${r.Precio}<br>
-                    <span class="badge-green">+{v:.2f}%</span>
+                    <b>{r.Ticker}</b> | ${r.Precio} {badge}<br>
+                    <span class="badge-green">+{r.Variacion:.2f}%</span> | Score: <b>{r.Score}/10</b>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -246,11 +266,11 @@ try:
             st.markdown("##### 🔻 Top Perdedoras")
             losers = df_stocks.tail(5).iloc[::-1]
             for r in losers.itertuples():
-                v = getattr(r, 'Variacion')
+                badge = '<span class="badge-outperform">⚡ Outperformer</span>' if r.Outperform else ''
                 st.markdown(f"""
                 <div class="card">
-                    <b>{r.Ticker}</b> | ${r.Precio}<br>
-                    <span class="badge-red">{v:.2f}%</span>
+                    <b>{r.Ticker}</b> | ${r.Precio} {badge}<br>
+                    <span class="badge-red">{r.Variacion:.2f}%</span> | Score: <b>{r.Score}/10</b>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -280,4 +300,4 @@ try:
 
 except Exception as e:
     st.error(f"Error cargando datos: {e}")
-                
+                    

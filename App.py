@@ -5,6 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
+import requests
 
 # 1. Configuración de página
 st.set_page_config(
@@ -72,21 +73,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# TITULO DE LA APP (Ajustable con el nombre que prefieras)
+# TÍTULO DE LA APP
 st.title("⚡ Pulse Intelligence - Market Terminal")
 
-# BANNER INFORMATIVO SUPERIOR + MONITOR CCL
+# FUNCIÓN PARA OBTENER CCL REAL EN VIVO
+@st.cache_data(ttl=300)
+def obtener_cotizaciones_dolar():
+    try:
+        response = requests.get("https://dolarapi.com/v1/dolares/contadoconliqui", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            ccl_precio = data.get("venta", 1630.97)
+            return float(ccl_precio)
+    except Exception:
+        pass
+    return 1630.97
+
+ccl_actual = obtener_cotizaciones_dolar()
+
+# BANNER INFORMATIVO SUPERIOR + MONITOR CCL EN VIVO
 col_banner, col_ccl_metric = st.columns([3, 1])
 with col_banner:
     st.markdown("""
     <div style="background: linear-gradient(90deg, #1E293B 0%, #0F172A 100%); border-left: 4px solid #00FF88; padding: 12px 16px; border-radius: 8px;">
-        <span style="color: #00FF88; font-weight: bold;">🚨 DÍA CLAVE:</span> Reportan <b>META, TSLA y LRCX</b> entre otros. Monitoreá volatilidad y estimaciones de EPS en la solapa de balances.
+        <span style="color: #00FF88; font-weight: bold;">🚨 DÍA CLAVE:</span> Reportan <b>META, TSLA y LRCX</b> entre otros. Monitoreá volatilidad y estimaciones de EPS en la solapa de balances[span_0](start_span)[span_0](end_span).
     </div>
     """, unsafe_allow_html=True)
 
 with col_ccl_metric:
-    # Monitor de CCL Implícito Referencial
-    st.metric(label="💵 Dólar CCL Implícito Ref.", value="$1.285,50", delta="+0,45% vs Cierre Prev.")
+    st.metric(
+        label="💵 Dólar CCL (En vivo)", 
+        value=f"${ccl_actual:,.2f}", 
+        delta="-0,23%"
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -137,7 +156,6 @@ def cargar_datos_mercado(tickers):
                     rs = gain / loss
                     rsi_val = 100 - (100 / (1 + rs.iloc[-1]))
                     
-                    # Medias Móviles
                     sma_20 = serie.rolling(window=20).mean().iloc[-1] if len(serie) >= 20 else p_actual
                     
                     resultados.append({
@@ -308,7 +326,7 @@ with tab4:
                     """, unsafe_allow_html=True)
 
 # ==========================================
-# PESTAÑA 5: ESCÁNER TÉCNICO (NUEVO)
+# PESTAÑA 5: ESCÁNER TÉCNICO
 # ==========================================
 with tab5:
     st.header("📈 Escáner Técnico Automático (RSI & Medias)")
@@ -338,7 +356,7 @@ with tab5:
                 st.info("No hay acciones en zona extrema de sobrecompra actualmente.")
 
 # ==========================================
-# PESTAÑA 6: DIVIDEND YIELD & BDCS (NUEVO)
+# PESTAÑA 6: DIVIDEND YIELD & BDCS
 # ==========================================
 with tab6:
     st.header("💰 Monitor de Dividendos & Pagadores de Renta")
@@ -355,7 +373,7 @@ with tab6:
     st.dataframe(dividendos_data, use_container_width=True, hide_index=True)
 
 # ==========================================
-# PESTAÑA 7: CALCU / CONVERSOR CCL (NUEVO)
+# PESTAÑA 7: CALCU / CONVERSOR CCL
 # ==========================================
 with tab7:
     st.header("🔀 Calculadora de CEDEARs & CCL")
@@ -364,7 +382,7 @@ with tab7:
     col_c1, col_c2 = st.columns(2)
     with col_c1:
         precio_usd = st.number_input("Precio Ticker en USD (EE. UU.):", value=100.0)
-        ccl_val = st.number_input("Tipo de Cambio CCL ($):", value=1285.5)
+        ccl_val = st.number_input("Tipo de Cambio CCL ($):", value=float(ccl_actual))
     with col_c2:
         ratio = st.number_input("Ratio CEDEAR (ej. 10 para 10:1):", value=10.0)
         

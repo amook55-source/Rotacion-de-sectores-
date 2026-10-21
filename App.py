@@ -7,21 +7,20 @@ def render_seccion_balances_automatico():
     st.header("📅 Próximos Balances (Organizados por Día)")
     st.write("Calendario automático de reportes de resultados para las principales acciones y CEDEARs.")
 
-    # Lista amplia predefinida para que la app los busque solos
     tickers_automaticos = [
         "META", "TSLA", "LRCX", "AAPL", "NVDA", "AMZN", "MSFT", 
         "GOOGL", "AMD", "NFLX", "MELI", "BABA", "JPM", "DIS", 
         "KO", "INTC", "PYPL", "BA", "PEP", "XOM", "CVX", "PFE"
     ]
 
-    @st.cache_data(ttl=3600) # Caché de 1 hora para que cargue rápido sin demorar
+    @st.cache_data(ttl=3600)
     def obtener_balances_automaticos(tickers):
         datos = []
         ahora = datetime.now() - timedelta(days=1)
         for ticker in tickers:
             try:
                 t = yf.Ticker(ticker)
-                cal = t.get_earnings_dates(limit=4)
+                cal = t.get_earnings_dates(limit=3)
                 if cal is not None and not cal.empty:
                     futuras = cal[cal.index >= ahora]
                     if not futuras.empty:
@@ -55,10 +54,7 @@ def render_seccion_balances_automatico():
         st.warning("No se pudieron recuperar las fechas en este momento. Probá recargar la página.")
         return
 
-    # Ordenar por fecha cronológica
     df = df.sort_values(by="Hora_dt")
-
-    # Agrupar y mostrar por día de manera visual
     fechas_unicas = df["Fecha"].unique()
 
     for fecha in fechas_unicas:

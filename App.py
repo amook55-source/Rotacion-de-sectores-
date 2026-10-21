@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+from datetime import datetime, timedelta
 
 # 1. Configuración de página
 st.set_page_config(
@@ -69,10 +70,12 @@ st.markdown("""
 
 st.title("⚡ Warren Dashboard - Market Intelligence")
 
-tab1, tab2, tab3 = st.tabs([
+# 4 Pestañas principales (con la nueva pestaña de Balances incluida)
+tab1, tab2, tab3, tab4 = st.tabs([
     "🌀 Rotación Sectorial", 
     "😱 Régimen & Índice de Miedo", 
-    "🇺🇸 Mercado EE. UU. por Sector"
+    "🇺🇸 Mercado EE. UU. por Sector",
+    "📅 Próximos Balances"
 ])
 
 # Universo de Acciones
@@ -167,8 +170,6 @@ with tab2:
         alcistas = len(df_mercado[df_mercado["Variacion"] > 0])
         pct_alcista = (alcistas / total) * 100
         
-        # Cálculo sintético del Índice de Miedo (0 = Miedo Extremo, 100 = Codicia Extrema)
-        # Combinando Amplitud de Mercado + VIX
         fear_greed_score = max(0, min(100, (pct_alcista * 0.6) + ((35 - valor_vix) * 2)))
         
         if fear_greed_score < 25:
@@ -192,7 +193,6 @@ with tab2:
         with col1:
             st.subheader(f"Estado Actual: {estado_texto}")
             
-            # Velocímetro Estilo Neón / Warren
             fig_gauge = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=fear_greed_score,
@@ -262,4 +262,68 @@ with tab3:
                     df_sec["Precio ($)"] = df_sec["Precio"].apply(lambda x: f"${x:.2f}")
                     df_sec["Variación (%)"] = df_sec["Variacion"].apply(lambda x: f"{'+' if x>=0 else ''}{x:.2f}%")
                     st.dataframe(df_sec[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
+
+# ==========================================
+# PESTAÑA 4: PRÓXIMOS BALANCES (AUTOMÁTICO)
+# ==========================================
+with tab4:
+    st.header("📅 Calendario de Próximos Balances (Earnings)")
+    st.write("Monitoreo automático de presentación de resultados y estimaciones de EPS para las principales acciones y CEDEARs.")
+
+    @st.cache_data(ttl=3600)
+    def obtener_balances_automaticos(tickers):
+        datos = []
+        ahora = datetime.now() - timedelta(days=1)
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                cal = t.get_earnings_dates(limit=3)
+                if cal is not None and not cal.empty:
+                    futuras = cal[cal.index >= ahora]
+                    if not futuras.empty:
+                        prox = futuras.index[0]
+                        fila = futuras.iloc[0]
+                        eps_est = fila.get('EPS Estimate', None)
+                        
+                        hora = prox.hour
+                        if hora < 12:
+                            momento = "PRE (Antes de la campana)"
+                        elif hora >= 16:
+                            momento = "POST (Después del cierre)"
+                        else:
+                            momento = "DURANTE / HORA NO ESPECIFICADA"
+
+                        datos.append({
+                            "Ticker": ticker,
+                            "Fecha": prox.strftime('%Y-%m-%d'),
+                            "Hora_dt": prox,
+                            "Momento": momento,
+                            "EPS Estimado": f"${eps_est:.2f}" if pd.notnull(eps_est) else "N/A"
+                        })
+            except Exception:
+                continue
+        return pd.DataFrame(datos)
+
+    with st.spinner("Consultando próximos balances automáticamente..."):
+        df_balances = obtener_balances_automaticos(TODOS_TICKERS)
+
+    if df_balances.empty:
+        st.warning("No se pudieron recuperar las fechas en este momento. Probá recargar la página.")
+    else:
+        df_balances = df_balances.sort_values(by="Hora_dt")
+        fechas_unicas = df_balances["Fecha"].unique()
+
+        for fecha in fechas_unicas:
+            df_dia = df_balances[df_balances["Fecha"] == fecha]
+            
+            with st.expander(f"🗓️ Fecha de Reporte: {fecha} ({len(df_dia)} empresas)", expanded=True):
+                for _, row in df_dia.iterrows():
+                    col_t, col_m, col_e = st.columns([1, 2, 2])
+                    with col_t:
+                        st.markdown(f"### **{row['Ticker']}**")
+                    with col_m:
+                        st.write(f"📌 **{row['Momento']}**")
+                    with col_e:
+                        st.write(f"💵 **EPS Est:** {row['EPS Estimado']}")
+                    st.markdown("---")
                     

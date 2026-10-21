@@ -18,98 +18,142 @@ tab1, tab2, tab3 = st.tabs([
     "🇺🇸 Acciones EE. UU. por Sector"
 ])
 
-# ==========================================
-# PESTAÑA 1 & 2 (Mantenemos tus gráficos RRG y Scores)
-# ==========================================
-with tab1:
-    st.header("Cuadro de Rotación de Sectores")
-    # Tu gráfico RRG aquí...
+# Lista unificada de acciones por sector
+SECTORES = {
+    "Tecnología 💻": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "AVGO", "AMD", "ORCL", "CRM", "INTC", "QCOM", "IBM"],
+    "Energía ⚡": ["XOM", "CVX", "COP", "SLB", "BP", "EOG", "MPC", "PSX", "VLO", "OXY"],
+    "Salud 🏥": ["JNJ", "PFE", "UNH", "ABBV", "LLY", "MRK", "TMO", "DHR", "BMY", "AMGN"],
+    "Financiero 🏦": ["JPM", "BAC", "WFC", "C", "MS", "GS", "BLK", "AXP", "V", "MA"],
+    "Consumo Discrecional 🛒": ["TSLA", "NKE", "MCD", "HD", "SBUX", "LOW", "BKNG", "TJX"],
+    "Industriales 🏗️": ["CAT", "DE", "GE", "LMT", "BA", "UNP", "HON", "MMM", "UPS"],
+    "Comunicaciones 📡": ["NFLX", "DIS", "TMUS", "VZ", "T", "CMCSA", "EA"]
+}
 
-with tab2:
-    st.header("Régimen & Top Scores")
-    # Tu régimen y scores aquí...
+TODOS_TICKERS = sorted(list(set([t for lista in SECTORES.values() for t in lista])))
 
-# ==========================================
-# PESTAÑA 3: ACCIONES EE. UU., GANADORES/PERDEDORES Y SECTORES
-# ==========================================
-with tab3:
-    st.header("🇺🇸 Mercado de Acciones de EE. UU.")
-
-    # Universo ampliado de acciones por sector
-    sectores_ampliados = {
-        "Tecnología 💻": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "AVGO", "AMD", "ORCL", "CRM", "INTC", "QCOM", "TXN", "IBM"],
-        "Energía ⚡": ["XOM", "CVX", "COP", "SLB", "BP", "EOG", "MPC", "PSX", "VLO", "OXY", "HAL"],
-        "Salud 🏥": ["JNJ", "PFE", "UNH", "ABBV", "LLY", "MRK", "TMO", "DHR", "BMY", "AMGN", "GILD"],
-        "Financiero 🏦": ["JPM", "BAC", "WFC", "C", "MS", "GS", "BLK", "AXP", "V", "MA", "SCHW"],
-        "Consumo Discrecional 🛒": ["TSLA", "NKE", "MCD", "HD", "SBUX", "LOW", "BKNG", "TJX", "TGT", "AMZN"],
-        "Industriales & Servicios 🏗️": ["CAT", "DE", "GE", "LMT", "BA", "UNP", "HON", "MMM", "UPS", "RTX"],
-        "Comunicaciones & Medios 📡": ["NFLX", "DIS", "TMUS", "VZ", "T", "CMCSA", "EA", "TTWO"]
-    }
-
-    # Función robusta para obtener cotizaciones sin error Nan
-    @st.cache_data(ttl=300)  # Guarda datos en caché por 5 minutos para que sea ultrarrápido
-    def obtener_cotizaciones(lista_tickers):
+@st.cache_data(ttl=300)
+def cargar_datos_mercado(tickers):
+    try:
+        # Descargamos todo de un solo paquete (mucho más rápido y sin bloqueos de API)
+        df_download = yf.download(tickers, period="5d", interval="1d", progress=False)['Close']
+        df_download = df_download.dropna(how='all')
+        
         resultados = []
-        for ticker in lista_tickers:
+        for ticker in tickers:
             try:
-                data = yf.Ticker(ticker).history(period="5d")
-                if len(data) >= 2:
-                    precio_actual = data['Close'].iloc[-1]
-                    precio_anterior = data['Close'].iloc[-2]
-                    var_pct = ((precio_actual - precio_anterior) / precio_anterior) * 100
+                serie = df_download[ticker].dropna() if isinstance(df_download, pd.DataFrame) else df_download.dropna()
+                if len(serie) >= 2:
+                    p_actual = serie.iloc[-1]
+                    p_previo = serie.iloc[-2]
+                    var_pct = ((p_actual - p_previo) / p_previo) * 100
                     
                     resultados.append({
                         "Ticker": ticker,
-                        "Precio ($)": round(precio_actual, 2),
-                        "Variación (%)": round(var_pct, 2),
-                        "Estado": "🟢 Subida" if var_pct >= 0 else "🔴 Baja"
+                        "Precio": float(p_actual),
+                        "Variacion": float(var_pct)
                     })
             except Exception:
-                pass
+                continue
         return pd.DataFrame(resultados)
+    except Exception as e:
+        return pd.DataFrame()
 
-    # 1. Cargar todas las acciones
-    todos_los_tickers = list(set([t for lista in sectores_ampliados.values() for t in lista]))
-    with st.spinner("Cargando cotizaciones en tiempo real..."):
-        df_todos = obtener_cotizaciones(todos_los_tickers)
+df_mercado = cargar_datos_mercado(TODOS_TICKERS)
 
-    if not df_todos.empty:
-        # ----------------------------------------------------
-        # SECCIÓN: TOP 10 GANADORES Y PERDEDORES
-        # ----------------------------------------------------
-        st.subheader("🔥 Top 10 Ganadores y Perdedores del Día")
-        col_ganadores, col_perdedores = st.columns(2)
+# ==========================================
+# PESTAÑA 1: ROTACIÓN SECTORIAL
+# ==========================================
+with tab1:
+    st.header("Cuadro de Rotación de Sectores")
+    sectors_data = pd.DataFrame({
+        'Sector': ['XLK (Tech)', 'XLE (Energía)', 'XLP (Consumo Def.)', 'XLV (Salud)', 'XLI (Industrial)'],
+        'Fuerza_Relativa': [-1.5, 1.8, 1.2, 1.5, -0.8],
+        'Momentum': [-1.8, 1.1, 1.9, 1.2, -0.5]
+    })
+    
+    fig_rrg = px.scatter(
+        sectors_data, x='Fuerza_Relativa', y='Momentum', text='Sector', color='Sector'
+    )
+    fig_rrg.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig_rrg.add_vline(x=0, line_dash="dash", line_color="gray")
+    fig_rrg.update_layout(template="plotly_dark", height=500)
+    st.plotly_chart(fig_rrg, use_container_width=True)
 
-        df_sorted = df_todos.sort_values(by="Variación (%)", ascending=False)
-
-        with col_ganadores:
-            st.markdown("### 🟢 Top 10 Ganadores")
-            top_ganadores = df_sorted.head(10).copy()
-            top_ganadores["Variación (%)"] = top_ganadores["Variación (%)"].apply(lambda x: f"+{x:.2f}%")
-            top_ganadores["Precio ($)"] = top_ganadores["Precio ($)"].apply(lambda x: f"${x:.2f}")
-            st.dataframe(top_ganadores[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
-
-        with col_perdedores:
-            st.markdown("### 🔴 Top 10 Perdedores")
-            top_perdedores = df_sorted.tail(10).iloc[::-1].copy()
-            top_perdedores["Variación (%)"] = top_perdedores["Variación (%)"].apply(lambda x: f"{x:.2f}%")
-            top_perdedores["Precio ($)"] = top_perdedores["Precio ($)"].apply(lambda x: f"${x:.2f}")
-            st.dataframe(top_perdedores[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # SECCIÓN: ACCIONES DIVIDIDAS POR SECTOR
-        # ----------------------------------------------------
-        st.subheader("📂 Cotizaciones Detalladas por Sector")
-
-        for sector, tickers in sectores_ampliados.items():
-            with st.expander(f"📁 **{sector}**", expanded=True):
-                df_sector = df_todos[df_todos["Ticker"].isin(tickers)].copy()
-                if not df_sector.empty:
-                    df_sector["Variación (%)"] = df_sector["Variación (%)"].apply(lambda x: f"{'+' if x >= 0 else ''}{x:.2f}%")
-                    df_sector["Precio ($)"] = df_sector["Precio ($)"].apply(lambda x: f"${x:.2f}")
-                    st.dataframe(df_sector[["Ticker", "Precio ($)", "Variación (%)", "Estado"]], use_container_width=True, hide_index=True)
-    else:
-        st.error("No se pudieron cargar los datos del mercado. Intenta refrescar en unos instantes.")
+# ==========================================
+# PESTAÑA 2: RÉGIMEN & METRICAS REALES
+# ==========================================
+with tab2:
+    st.header("🎯 Régimen de Mercado e Indicadores de Amplitud")
+    
+    if not df_mercado.empty:
+        total_activos = len(df_mercado)
+        alcistas = len(df_mercado[df_mercado["Variacion"] > 0])
+        bajistas = len(df_mercado[df_mercado["Variacion"] < 0])
+        pct_alcistas = (alcistas / total_activos) * 100 if total_activos > 0 else 0
         
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Acciones en Subida 🟢", f"{alcistas} / {total_activos}")
+        c2.metric("Acciones en Baja 🔴", f"{bajistas} / {total_activos}")
+        c3.metric("Amplitud de Mercado (% Alcista)", f"{pct_alcistas:.1f}%")
+        
+        # Tacómetro basado en la amplitud real
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=pct_alcistas,
+            title={'text': "Salud del Mercado (% Activos Verdes)"},
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "#00FF7F"},
+                'steps': [
+                    {'range': [0, 40], 'color': "#8B0000"},
+                    {'range': [40, 60], 'color': "#4682B4"},
+                    {'range': [60, 100], 'color': "#006400"}
+                ]
+            }
+        ))
+        fig_gauge.update_layout(template="plotly_dark", height=300)
+        st.plotly_chart(fig_gauge, use_container_width=True)
+    else:
+        st.info("Cargando métricas de régimen...")
+
+# ==========================================
+# PESTAÑA 3: ACCIONES EE. UU. Y GANADORES/PERDEDORES
+# ==========================================
+with tab3:
+    st.header("🇺🇸 Mercado de Acciones de EE. UU.")
+    
+    if not df_mercado.empty:
+        # Top 10 Ganadores y Perdedores
+        st.subheader("🔥 Top 10 Ganadores y Perdedores del Día")
+        col_g, col_p = st.columns(2)
+        
+        df_ord = df_mercado.sort_values(by="Variacion", ascending=False)
+        
+        with col_g:
+            st.markdown("#### 🟢 Top 10 Ganadores")
+            top_g = df_ord.head(10).copy()
+            top_g["Precio ($)"] = top_g["Precio"].apply(lambda x: f"${x:.2f}")
+            top_g["Variación (%)"] = top_g["Variacion"].apply(lambda x: f"+{x:.2f}%")
+            st.dataframe(top_g[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
+            
+        with col_p:
+            st.markdown("#### 🔴 Top 10 Perdedores")
+            top_p = df_ord.tail(10).iloc[::-1].copy()
+            top_p["Precio ($)"] = top_p["Precio"].apply(lambda x: f"${x:.2f}")
+            top_p["Variación (%)"] = top_p["Variacion"].apply(lambda x: f"{x:.2f}%")
+            st.dataframe(top_p[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
+            
+        st.divider()
+        
+        # Sectores
+        st.subheader("📂 Cotizaciones Detalladas por Sector")
+        for sector, tickers in SECTORES.items():
+            with st.expander(f"📁 **{sector}**", expanded=True):
+                df_sec = df_mercado[df_mercado["Ticker"].isin(tickers)].copy()
+                if not df_sec.empty:
+                    df_sec["Precio ($)"] = df_sec["Precio"].apply(lambda x: f"${x:.2f}")
+                    df_sec["Variación (%)"] = df_sec["Variacion"].apply(lambda x: f"{'+' if x>=0 else ''}{x:.2f}%")
+                    df_sec["Estado"] = df_sec["Variacion"].apply(lambda x: "🟢 Subida" if x>=0 else "🔴 Baja")
+                    st.dataframe(df_sec[["Ticker", "Precio ($)", "Variación (%)", "Estado"]], use_container_width=True, hide_index=True)
+    else:
+        st.error("No se pudieron consultar los datos en este momento. Reintenta actualizando la página.")

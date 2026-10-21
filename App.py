@@ -3,124 +3,75 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
 
-def obtener_calendario_balances(lista_tickers):
-    """
-    Consulta los próximos balances de una lista de tickers usando yfinance.
-    """
-    datos = []
-    
-    for ticker in lista_tickers:
-        try:
-            t = yf.Ticker(ticker)
-            # get_earnings_dates trae las fechas futuras y pasadas de balances
-            cal = t.get_earnings_dates(limit=4)
-            
-            if cal is not None and not cal.empty:
-                # Filtrar fechas futuras o muy recientes del día de hoy
-                ahora = datetime.now() - timedelta(days=1)
-                fechas_futuras = cal[cal.index >= ahora]
-                
-                if not fechas_futuras.empty:
-                    # Tomamos la fecha más próxima
-                    proxima_fecha = fechas_futuras.index[0]
-                    fila = fechas_futuras.iloc[0]
-                    
-                    eps_est = fila.get('EPS Estimate', None)
-                    eps_est_str = f"${eps_est:.2f}" if pd.notnull(eps_est) else "N/A"
-                    
-                    # Determinar si reporta antes de apertura (PRE) o después del cierre (POST)
-                    hora = proxima_fecha.hour
-                    if hora < 12:
-                        momento = "PRE"
-                    elif hora >= 16:
-                        momento = "POST"
-                    else:
-                        momento = "DURANTE"
+def render_seccion_balances_automatico():
+    st.header("📅 Próximos Balances (Organizados por Día)")
+    st.write("Calendario automático de reportes de resultados para las principales acciones y CEDEARs.")
 
-                    datos.append({
-                        "Ticker": ticker,
-                        "Fecha": proxima_fecha.strftime('%Y-%m-%d'),
-                        "Hora (UTC)": proxima_fecha.strftime('%H:%M'),
-                        "Momento": momento,
-                        "EPS Estimado": eps_est_str,
-                        "Fecha_dt": proxima_fecha
-                    })
-        except Exception as e:
-            continue
-            
-    df = pd.DataFrame(datos)
-    if not df.empty:
-        # Ordenar por fecha más cercana
-        df = df.sort_values(by="Fecha_dt").drop(columns=["Fecha_dt"])
-    return df
-
-# --- INTERFAZ DE STREAMLIT ---
-
-def render_seccion_balances():
-    st.header("📅 Calendario de Próximos Balances (Earnings)")
-    st.write("Monitoreo de presentación de resultados y estimaciones de EPS para CEDEARs y acciones clave.")
-
-    # Tickers por defecto (principales empresas de alto volumen)
-    tickers_defecto = [
+    # Lista amplia predefinida para que la app los busque solos
+    tickers_automaticos = [
         "META", "TSLA", "LRCX", "AAPL", "NVDA", "AMZN", "MSFT", 
-        "GOOGL", "AMD", "NFLX", "MELI", "BABA", "PFE", "KO", "DIS"
+        "GOOGL", "AMD", "NFLX", "MELI", "BABA", "JPM", "DIS", 
+        "KO", "INTC", "PYPL", "BA", "PEP", "XOM", "CVX", "PFE"
     ]
 
-    col_input, col_btn = st.columns([3, 1])
-    with col_input:
-        lista_input = st.text_input(
-            "Tickers a monitorear (separados por coma):",
-            value=", ".join(tickers_defecto)
-        )
-    
-    # Procesar entrada del usuario
-    tickers_usuario = [t.strip().upper() for t in lista_input.split(",") if t.strip()]
+    @st.cache_data(ttl=3600) # Caché de 1 hora para que cargue rápido sin demorar
+    def obtener_balances_automaticos(tickers):
+        datos = []
+        ahora = datetime.now() - timedelta(days=1)
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                cal = t.get_earnings_dates(limit=4)
+                if cal is not None and not cal.empty:
+                    futuras = cal[cal.index >= ahora]
+                    if not futuras.empty:
+                        prox = futuras.index[0]
+                        fila = futuras.iloc[0]
+                        eps_est = fila.get('EPS Estimate', None)
+                        
+                        hora = prox.hour
+                        if hora < 12:
+                            momento = "PRE (Antes de la campana)"
+                        elif hora >= 16:
+                            momento = "POST (Después del cierre)"
+                        else:
+                            momento = "DURANTE / HORA NO ESPECIFICADA"
 
-    with st.spinner("Cargando calendario de balances desde Yahoo Finance..."):
-        df_balances = obtener_calendario_balances(tickers_usuario)
+                        datos.append({
+                            "Ticker": ticker,
+                            "Fecha": prox.strftime('%Y-%m-%d'),
+                            "Hora_dt": prox,
+                            "Momento": momento,
+                            "EPS Estimado": f"${eps_est:.2f}" if pd.notnull(eps_est) else "N/A"
+                        })
+            except Exception:
+                continue
+        return pd.DataFrame(datos)
 
-    if df_balances.empty:
-        st.warning("No se encontraron fechas de balances próximas para los tickers seleccionados.")
+    with st.spinner("Consultando próximos balances automáticamente..."):
+        df = obtener_balances_automaticos(tickers_automaticos)
+
+    if df.empty:
+        st.warning("No se pudieron recuperar las fechas en este momento. Probá recargar la página.")
         return
 
-    # --- TARJETAS DESTACADAS (Día Actual / Próximos 2 días) ---
-    st.subheader("📌 Destacados Próximos")
-    
-    # Tomamos los primeros 4 tickers con balance más cercano
-    top_destacados = df_balances.head(4)
-    cols = st.columns(len(top_destacados))
+    # Ordenar por fecha cronológica
+    df = df.sort_values(by="Hora_dt")
 
-    for i, (_, row) in enumerate(top_destacados.iterrows()):
-        with cols[i]:
-            badge_color = "🔴" if row["Momento"] == "POST" else "🟡"
-            st.metric(
-                label=f"{row['Ticker']} ({row['Momento']})",
-                value=f"EPS Est: {row['EPS Estimado']}",
-                delta=f"Fecha: {row['Fecha']}"
-            )
+    # Agrupar y mostrar por día de manera visual
+    fechas_unicas = df["Fecha"].unique()
 
-    st.markdown("---")
-
-    # --- TABLA COMPLETA ---
-    st.subheader("📋 Tabla General de Balances")
-
-    # Estilizar la tabla según el horario (PRE / POST)
-    def resaltar_momento(val):
-        if val == "POST":
-            return 'background-color: rgba(138, 43, 226, 0.2); color: #d1c4e9; font-weight: bold;'
-        elif val == "PRE":
-            return 'background-color: rgba(255, 165, 0, 0.2); color: #ffe0b2; font-weight: bold;'
-        return ''
-
-    # Mostrar la tabla formateada
-    st.dataframe(
-        df_balances.style.applymap(resaltar_momento, subset=["Momento"]),
-        use_container_width=True,
-        hide_index=True
-    )
-
-# Para probarlo de forma independiente:
-if __name__ == "__main__":
-    st.set_page_config(page_title="Dashboard de Balances", layout="wide")
-    render_seccion_balances()
-    
+    for fecha in fechas_unicas:
+        df_dia = df[df["Fecha"] == fecha]
+        
+        with st.expander(f"🗓️ Fecha de Reporte: {fecha} ({len(df_dia)} empresas)", expanded=True):
+            for _, row in df_dia.iterrows():
+                col_t, col_m, col_e = st.columns([1, 2, 2])
+                with col_t:
+                    st.markdown(f"### **{row['Ticker']}**")
+                with col_m:
+                    st.write(f"📌 **{row['Momento']}**")
+                with col_e:
+                    st.write(f"💵 **EPS Est:** {row['EPS Estimado']}")
+                st.markdown("---")
+                

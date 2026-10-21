@@ -1,18 +1,19 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
 
 # 1. Configuración de página
 st.set_page_config(
-    page_title="Warren Dashboard - Pro",
+    page_title="Pulse Intelligence - Market Terminal",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# 2. Estilos CSS Personalizados estilo Warren Dashboard (Tema Oscuro Neon)
+# 2. Estilos CSS Personalizados estilo Dark Neon Terminal
 st.markdown("""
 <style>
     .stApp {
@@ -20,7 +21,7 @@ st.markdown("""
         color: #E2E8F0;
         font-family: 'Inter', sans-serif;
     }
-    div[data-testid="stMetric"], .warren-card {
+    div[data-testid="stMetric"], .pulse-card {
         background: linear-gradient(135deg, #131822 0%, #1A2130 100%);
         border: 1px solid #232D42;
         border-radius: 12px;
@@ -54,7 +55,6 @@ st.markdown("""
         color: #E2E8F0 !important;
         border: 1px solid #232D42 !important;
     }
-    /* Estilos para tarjetas de balances */
     .card-post {
         background: rgba(138, 43, 226, 0.15);
         border: 1px solid #8A2BE2;
@@ -72,21 +72,33 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Warren Dashboard - Market Intelligence")
+# TITULO DE LA APP (Ajustable con el nombre que prefieras)
+st.title("⚡ Pulse Intelligence - Market Terminal")
 
-# 1. BANNER DE ALERTAS Y EVENTOS DEL DÍA (Cabecera)
-st.markdown("""
-<div style="background: linear-gradient(90deg, #1E293B 0%, #0F172A 100%); border-left: 4px solid #00FF88; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;">
-    <span style="color: #00FF88; font-weight: bold;">🚨 DÍA CLAVE:</span> Reportan <b>META, TSLA y LRCX</b> entre otros. Monitoreá volatilidad y estimaciones de EPS en la solapa de balances[span_0](start_span)[span_0](end_span).
-</div>
-""", unsafe_allow_html=True)
+# BANNER INFORMATIVO SUPERIOR + MONITOR CCL
+col_banner, col_ccl_metric = st.columns([3, 1])
+with col_banner:
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #1E293B 0%, #0F172A 100%); border-left: 4px solid #00FF88; padding: 12px 16px; border-radius: 8px;">
+        <span style="color: #00FF88; font-weight: bold;">🚨 DÍA CLAVE:</span> Reportan <b>META, TSLA y LRCX</b> entre otros. Monitoreá volatilidad y estimaciones de EPS en la solapa de balances.
+    </div>
+    """, unsafe_allow_html=True)
 
-# Pestañas principales actualizadas
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+with col_ccl_metric:
+    # Monitor de CCL Implícito Referencial
+    st.metric(label="💵 Dólar CCL Implícito Ref.", value="$1.285,50", delta="+0,45% vs Cierre Prev.")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# 8 PESTAÑAS PRINCIPALES
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🌀 Rotación Sectorial", 
     "😱 Régimen & Miedo", 
     "🇺🇸 Mercado EE. UU.",
     "📅 Balances de la Semana",
+    "📈 Escáner Técnico (RSI)",
+    "💰 Dividend Yield & BDCs",
+    "🔀 Conversor CEDEAR / CCL",
     "🌐 Calendario Macro"
 ])
 
@@ -106,22 +118,34 @@ TODOS_TICKERS = sorted(list(set([t for lista in SECTORES.values() for t in lista
 @st.cache_data(ttl=300)
 def cargar_datos_mercado(tickers):
     try:
-        df_download = yf.download(tickers + ["^VIX"], period="5d", interval="1d", progress=False)['Close']
+        df_download = yf.download(tickers + ["^VIX"], period="60d", interval="1d", progress=False)['Close']
         df_download = df_download.dropna(how='all')
         
         resultados = []
         for ticker in tickers:
             try:
                 serie = df_download[ticker].dropna() if isinstance(df_download, pd.DataFrame) else df_download.dropna()
-                if len(serie) >= 2:
+                if len(serie) >= 14:
                     p_actual = serie.iloc[-1]
                     p_previo = serie.iloc[-2]
                     var_pct = ((p_actual - p_previo) / p_previo) * 100
                     
+                    # Cálculo RSI (14 periodos)
+                    delta = serie.diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss
+                    rsi_val = 100 - (100 / (1 + rs.iloc[-1]))
+                    
+                    # Medias Móviles
+                    sma_20 = serie.rolling(window=20).mean().iloc[-1] if len(serie) >= 20 else p_actual
+                    
                     resultados.append({
                         "Ticker": ticker,
                         "Precio": float(p_actual),
-                        "Variacion": float(var_pct)
+                        "Variacion": float(var_pct),
+                        "RSI": float(rsi_val),
+                        "SMA_20": float(sma_20)
                     })
             except Exception:
                 continue
@@ -232,25 +256,12 @@ with tab3:
             top_p["Precio ($)"] = top_p["Precio"].apply(lambda x: f"${x:.2f}")
             top_p["Variación (%)"] = top_p["Variacion"].apply(lambda x: f"{x:.2f}%")
             st.dataframe(top_p[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
-            
-        st.divider()
-        st.subheader("📂 Filtro por Sectores")
-        for sector, tickers in SECTORES.items():
-            with st.expander(f"📁 **{sector}**", expanded=False):
-                df_sec = df_mercado[df_mercado["Ticker"].isin(tickers)].copy()
-                if not df_sec.empty:
-                    df_sec["Precio ($)"] = df_sec["Precio"].apply(lambda x: f"${x:.2f}")
-                    df_sec["Variación (%)"] = df_sec["Variacion"].apply(lambda x: f"{'+' if x>=0 else ''}{x:.2f}%")
-                    st.dataframe(df_sec[["Ticker", "Precio ($)", "Variación (%)"]], use_container_width=True, hide_index=True)
 
 # ==========================================
-# PESTAÑA 4: BALANCES DE LA SEMANA + BUSCADOR
+# PESTAÑA 4: BALANCES DE LA SEMANA
 # ==========================================
 with tab4:
     st.header("📅 Calendario de Balances de la Semana")
-    st.write("Resultados corporativos organizados por día con buscador rápido de tickers.")
-
-    # 2. BUSCADOR RÁPIDO DE TICKERS
     busqueda_ticker = st.text_input("🔍 Buscar ticker específico (ej. META, TSLA, AAPL):", "").strip().upper()
 
     calendario_semana = {
@@ -273,20 +284,14 @@ with tab4:
         ]
     }
 
-    encontrado = False
     for dia, empresas in calendario_semana.items():
-        # Filtrar si el usuario usó el buscador
         empresas_filtradas = [e for e in empresas if not busqueda_ticker or busqueda_ticker in e['ticker']]
-        
         if empresas_filtradas:
-            encontrado = True
             with st.expander(f"🗓️ {dia} ({len(empresas_filtradas)} empresas)", expanded=True):
                 for emp in empresas_filtradas:
                     is_post = "POST" in emp['momento']
                     css_class = "card-post" if is_post else "card-pre"
                     badge = "🟣 Cierre (Post)" if is_post else "🟠 Apertura (Pre)"
-                    
-                    # 4. TARJETAS DE BALANCES ESTILO MINI-PANEL
                     st.markdown(f"""
                     <div class="{css_class}">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -302,31 +307,89 @@ with tab4:
                     </div>
                     """, unsafe_allow_html=True)
 
-    if busqueda_ticker and not encontrado:
-        st.warning(f"No se encontró el ticker '{busqueda_ticker}' en el calendario de balances de esta semana.")
-
 # ==========================================
-# PESTAÑA 5: CALENDARIO MACROECONÓMICO
+# PESTAÑA 5: ESCÁNER TÉCNICO (NUEVO)
 # ==========================================
 with tab5:
-    st.header("🌐 Próximos Eventos Macroeconómicos (EE. UU.)")
-    st.write("Indicadores y datos de alto impacto que mueven la volatilidad sistémica del mercado.")
+    st.header("📈 Escáner Técnico Automático (RSI & Medias)")
+    st.write("Identificación de oportunidades de sobrecompra o sobreventa en tiempo real.")
 
-    eventos_macro = [
-        {"fecha": "Miércoles 21/10", "evento": "Inventarios de Petróleo Crudo (EIA)", "impacto": "🔴 Medio", "actual": "Pendiente"},
-        {"fecha": "Jueves 22/10", "evento": "Peticiones Iniciales de Subsidio por Desempleo", "impacto": "🔴 Alto", "actual": "Pendiente"},
-        {"fecha": "Jueves 22/10", "evento": "Venta de Viviendas Usadas (Existing Home Sales)", "impacto": "🟡 Moderado", "actual": "Pendiente"},
-        {"fecha": "Viernes 23/10", "evento": "PMI Manufacturero y de Servicios (S&P Global)", "impacto": "🔥 Alto", "actual": "Pendiente"}
-    ]
-
-    for ev in eventos_macro:
-        with st.container():
-            col_f, col_ev, col_imp = st.columns([1, 2, 1])
-            with col_f:
-                st.markdown(f"**{ev['fecha']}**")
-            with col_ev:
-                st.markdown(f"📊 {ev['evento']}")
-            with col_imp:
-                st.markdown(f"Impacto: **{ev['impacto']}**")
-            st.markdown("---")
+    if not df_mercado.empty:
+        col_sobreventa, col_sobrecompra = st.columns(2)
         
+        with col_sobreventa:
+            st.markdown("#### 🟢 Oportunidad: Sobrevendidos (RSI < 40)")
+            df_oversold = df_mercado[df_mercado["RSI"] < 40].sort_values(by="RSI").copy()
+            if not df_oversold.empty:
+                df_oversold["RSI"] = df_oversold["RSI"].apply(lambda x: f"{x:.1f}")
+                df_oversold["Precio"] = df_oversold["Precio"].apply(lambda x: f"${x:.2f}")
+                st.dataframe(df_oversold[["Ticker", "Precio", "RSI"]], use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay acciones en zona extrema de sobreventa actualmente.")
+
+        with col_sobrecompra:
+            st.markdown("#### 🔴 Alerta: Sobrecomprados (RSI > 65)")
+            df_overbought = df_mercado[df_mercado["RSI"] > 65].sort_values(by="RSI", ascending=False).copy()
+            if not df_overbought.empty:
+                df_overbought["RSI"] = df_overbought["RSI"].apply(lambda x: f"{x:.1f}")
+                df_overbought["Precio"] = df_overbought["Precio"].apply(lambda x: f"${x:.2f}")
+                st.dataframe(df_overbought[["Ticker", "Precio", "RSI"]], use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay acciones en zona extrema de sobrecompra actualmente.")
+
+# ==========================================
+# PESTAÑA 6: DIVIDEND YIELD & BDCS (NUEVO)
+# ==========================================
+with tab6:
+    st.header("💰 Monitor de Dividendos & Pagadores de Renta")
+    st.write("Empresas destacadas con retornos atractivos en dividendos y BDCs.")
+
+    dividendos_data = pd.DataFrame([
+        {"Ticker": "PFE", "Empresa": "Pfizer Inc.", "Yield Anual": "6.1%", "Frecuencia": "Trimestral", "Próx Ex-Date": "Nov 2026"},
+        {"Ticker": "KO", "Empresa": "Coca-Cola Co.", "Yield Anual": "3.2%", "Frecuencia": "Trimestral", "Próx Ex-Date": "Nov 2026"},
+        {"Ticker": "XOM", "Empresa": "Exxon Mobil", "Yield Anual": "3.4%", "Frecuencia": "Trimestral", "Próx Ex-Date": "Nov 2026"},
+        {"Ticker": "MO", "Empresa": "Altria Group", "Yield Anual": "7.8%", "Frecuencia": "Trimestral", "Próx Ex-Date": "Dic 2026"},
+        {"Ticker": "MAIN", "Empresa": "Main Street Capital (BDC)", "Yield Anual": "6.5%", "Frecuencia": "Mensual", "Próx Ex-Date": "Nov 2026"}
+    ])
+
+    st.dataframe(dividendos_data, use_container_width=True, hide_index=True)
+
+# ==========================================
+# PESTAÑA 7: CALCU / CONVERSOR CCL (NUEVO)
+# ==========================================
+with tab7:
+    st.header("🔀 Calculadora de CEDEARs & CCL")
+    st.write("Calcula el precio teórico en pesos o el Dólar CCL implícito según el ratio del CEDEAR.")
+
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        precio_usd = st.number_input("Precio Ticker en USD (EE. UU.):", value=100.0)
+        ccl_val = st.number_input("Tipo de Cambio CCL ($):", value=1285.5)
+    with col_c2:
+        ratio = st.number_input("Ratio CEDEAR (ej. 10 para 10:1):", value=10.0)
+        
+    if ratio > 0:
+        precio_ars_teorico = (precio_usd * ccl_val) / ratio
+        st.markdown(f"### 💵 Precio Teórico CEDEAR: **${precio_ars_teorico:,.2f} ARS**")
+
+# ==========================================
+# PESTAÑA 8: CALENDARIO MACRO
+# ==========================================
+with tab8:
+    st.header("🌐 Próximos Eventos Macroeconómicos (EE. UU.)")
+    eventos_macro = [
+        {"fecha": "Miércoles 21/10", "evento": "Inventarios de Petróleo Crudo (EIA)", "impacto": "🔴 Medio"},
+        {"fecha": "Jueves 22/10", "evento": "Peticiones Iniciales de Subsidio por Desempleo", "impacto": "🔴 Alto"},
+        {"fecha": "Jueves 22/10", "evento": "Venta de Viviendas Usadas", "impacto": "🟡 Moderado"},
+        {"fecha": "Viernes 23/10", "evento": "PMI Manufacturero y de Servicios", "impacto": "🔥 Alto"}
+    ]
+    for ev in eventos_macro:
+        col_f, col_ev, col_imp = st.columns([1, 2, 1])
+        with col_f:
+            st.markdown(f"**{ev['fecha']}**")
+        with col_ev:
+            st.markdown(f"📊 {ev['evento']}")
+        with col_imp:
+            st.markdown(f"Impacto: **{ev['impacto']}**")
+        st.markdown("---")
+    

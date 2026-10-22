@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. Estilos CSS Avanzados (Estilo Warren Dashboard Neón Oscuro)
+# 2. Estilos CSS Globales y Específicos para Balances
 st.markdown("""
 <style>
     .stApp {
@@ -53,12 +53,49 @@ st.markdown("""
         color: #E2E8F0 !important;
         border: 1px solid #232D42 !important;
     }
+    
+    /* Estilos exactos para las tarjetas de balances */
+    .card-post {
+        background-color: #120D1D;
+        border: 1px solid #7C3AED;
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .card-pre {
+        background-color: #1A160C;
+        border: 1px solid #D97706;
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .badge-post {
+        color: #A78BFA;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .badge-pre {
+        color: #FBBF24;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .eps-val {
+        color: #10B981;
+        font-size: 1.3rem;
+        font-weight: 700;
+        text-align: right;
+    }
+    .eps-lbl {
+        color: #9CA3AF;
+        font-size: 0.8rem;
+        text-align: right;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("⚡ Warren Dashboard - Market Intelligence Pro")
 
-# Pestañas principales incluyendo Balances
+# Pestañas principales de navegación
 tab_resumen, tab_score, tab_senales, tab_balances, tab_rotacion = st.tabs([
     "📋 Resumen & Régimen", 
     "🎯 Warren Score", 
@@ -161,31 +198,53 @@ with tab_senales:
     st.info("Monitoreo activo de cruces EMA200, RSI y MACD.")
 
 # ==========================================
-# 4. CALENDARIO DE BALANCES (EARNINGS) - NUEVO!
+# 4. CALENDARIO DE BALANCES (EARNINGS)
 # ==========================================
 with tab_balances:
-    st.header("📅 Calendario de Balances de la Semana")
-    st.caption("Próximos reportes de ganancias corporativas (EPS Estimado y Reacción del Mercado).")
-    
-    # Datos simulados profesionales idénticos al Warren Dashboard
-    df_balances = pd.DataFrame([
-        {"Ticker": "META", "Empresa": "Meta Platforms", "Día": "Miércoles 28/10", "Momento": "POST CIERRE", "EPS Est": "$4.98", "Reacción": "Pendiente"},
-        {"Ticker": "TSLA", "Empresa": "Tesla Inc.", "Día": "Miércoles 28/10", "Momento": "POST CIERRE", "EPS Est": "$0.22", "Reacción": "Pendiente"},
-        {"Ticker": "LRCX", "Empresa": "Lam Research", "Día": "Miércoles 28/10", "Momento": "POST CIERRE", "EPS Est": "$2.17", "Reacción": "Pendiente"},
-        {"Ticker": "PM", "Empresa": "Philip Morris", "Día": "Jueves 29/10", "Momento": "PRE APERTURA", "EPS Est": "$2.30", "Reacción": "🔴 -1,2% hoy"},
-        {"Ticker": "TMO", "Empresa": "Thermo Fisher", "Día": "Jueves 29/10", "Momento": "PRE APERTURA", "EPS Est": "$6.40", "Reacción": "🟢 +1,0% hoy"},
-        {"Ticker": "IBM", "Empresa": "Int. Business Machines", "Día": "Viernes 30/10", "Momento": "POST CIERRE", "EPS Est": "$2.88", "Reacción": "Pendiente"},
-        {"Ticker": "DHR", "Empresa": "Danaher Corp.", "Día": "Viernes 30/10", "Momento": "PRE APERTURA", "EPS Est": "$1.92", "Reacción": "🟢 +4,4% hoy"}
-    ])
-    
-    for index, row in df_balances.iterrows():
-        with st.container():
-            col_b1, col_b2, col_b3, col_b4 = st.columns([1, 2, 2, 1])
-            col_b1.markdown(f"### **{row['Ticker']}**")
-            col_b2.markdown(f"🗓️ *{row['Día']}*  \n🕒 `{row['Momento']}`")
-            col_b3.markdown(f"📊 **EPS Est:** `{row['EPS Est']}`")
-            col_b4.markdown(f"📈 **{row['Reacción']}**")
-            st.divider()
+    st.subheader("📅 Resultados Corporativos de la Semana")
+    st.caption("Resultados corporativos organizados por día con buscador rápido de tickers.")
+
+    # Buscador de ticker
+    ticker_buscado = st.text_input("🔍 Buscar ticker específico (ej. META, TSLA, AAPL):", "").strip().upper()
+
+    dias_earnings = {
+        "🗓️ Miércoles 21 de Octubre (5 empresas)": [
+            {"ticker": "META", "momento": "Cierre (Post)", "tipo": "post", "eps": "$4.98"},
+            {"ticker": "TSLA", "momento": "Cierre (Post)", "tipo": "post", "eps": "$0.22"},
+            {"ticker": "LRCX", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.17"},
+            {"ticker": "PM", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.30"},
+            {"ticker": "IBM", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.88"}
+        ]
+    }
+
+    for dia_label, lista_empresas in dias_earnings.items():
+        if ticker_buscado:
+            lista_filtrada = [e for e in lista_empresas if ticker_buscado in e["ticker"]]
+        else:
+            lista_filtrada = lista_empresas
+
+        if lista_filtrada:
+            with st.expander(dia_label, expanded=True):
+                for emp in lista_filtrada:
+                    clase_card = "card-post" if emp["tipo"] == "post" else "card-pre"
+                    clase_badge = "badge-post" if emp["tipo"] == "post" else "badge-pre"
+                    icono = "🟣" if emp["tipo"] == "post" else "🟠"
+
+                    html_card = f"""
+                    <div class="{clase_card}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h2 style="margin: 0; color: #FFFFFF; font-size: 1.8rem; font-weight: 700;">{emp['ticker']}</h2>
+                                <span class="{clase_badge}">{icono} {emp['momento']}</span>
+                            </div>
+                            <div>
+                                <div class="eps-lbl">EPS Estimado</div>
+                                <div class="eps-val">{emp['eps']}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_card, unsafe_allow_html=True)
 
 # ==========================================
 # 5. ROTACIÓN SECTORIAL
@@ -200,4 +259,4 @@ with tab_rotacion:
     fig_rrg = px.scatter(sectors_data, x='Fuerza_Relativa', y='Momentum', text='Sector', color='Sector', color_discrete_sequence=["#FF3B69", "#00FF88", "#FFB800", "#00E5FF", "#A855F7"])
     fig_rrg.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#131822', font=dict(color='#E2E8F0'), height=500)
     st.plotly_chart(fig_rrg, use_container_width=True)
-    
+                    

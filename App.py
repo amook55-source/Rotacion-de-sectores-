@@ -265,30 +265,39 @@ with tab_score:
         
         for idx, row in df_score_sorted.head(10).iterrows():
             posicion = idx + 1
-            card_html = f"""
-            <div class="score-card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <span style="color: #64748B; font-weight: 700; font-size: 1.2rem;">#{posicion}</span>
-                        <div>
-                            <div class="ticker-title">{row['Ticker']}</div>
-                            <div style="color: #64748B; font-size: 0.85rem;">Precio: ${row['Precio']:.2f} &nbsp;|&nbsp; Var: <span style="color: {'#00FF88' if row['Variacion'] >= 0 else '#FF3B69'};">{row['Variacion']:+.2f}%</span></div>
+            
+            # Contenedor con estilo de tarjeta oscura
+            with st.container():
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #131822 0%, #1A2130 100%); border: 1px solid #1E293B; border-left: 4px solid #00FF88; border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span style="color: #64748B; font-weight: 700; font-size: 1.2rem;">#{posicion}</span>
+                            <div>
+                                <div style="color: #FFFFFF; font-size: 1.5rem; font-weight: 700; margin: 0;">{row['Ticker']}</div>
+                                <div style="color: #64748B; font-size: 0.85rem;">Precio: ${row['Precio']:.2f} &nbsp;|&nbsp; Var: <span style="color: {'#00FF88' if row['Variacion'] >= 0 else '#FF3B69'};">{row['Variacion']:+.2f}%</span></div>
+                            </div>
+                        </div>
+                        <div style="background-color: #052E16; color: #00FF88; border: 1px solid #059669; border-radius: 8px; padding: 6px 12px; font-size: 1.2rem; font-weight: 700; text-align: center;">
+                            {row['WarrenScore']} <span style="font-size: 0.7rem; color: #94A3B8;">pts</span>
                         </div>
                     </div>
-                    <div class="score-badge">
-                        {row['WarrenScore']} <span style="font-size: 0.7rem; color: #94A3B8;">pts</span>
-                    </div>
                 </div>
+                """, unsafe_allow_html=True)
                 
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px;">
-                    <div class="pillar-box">TEND.<br><span class="pillar-val">{row['Tendencia']} / 20</span></div>
-                    <div class="pillar-box">FUERZA<br><span class="pillar-val">{row['Fuerza']} / 25</span></div>
-                    <div class="pillar-box">CONTR.<br><span class="pillar-val">{row['Contraccion']} / 35</span></div>
-                    <div class="pillar-box">SETUP<br><span class="pillar-val">{row['Setup']} / 20</span></div>
-                </div>
-            </div>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
+                # Columnas nativas para los pilares (evita problemas de renderizado HTML en Streamlit)
+                p1, p2, p3, p4 = st.columns(4)
+                with p1:
+                    st.metric("TEND.", f"{row['Tendencia']} / 20")
+                with p2:
+                    st.metric("FUERZA", f"{row['Fuerza']} / 25")
+                with p3:
+                    st.metric("CONTR.", f"{row['Contraccion']} / 35")
+                with p4:
+                    st.metric("SETUP", f"{row['Setup']} / 20")
+                
+                st.divider()
+
 
 # ==========================================
 # 3. SEÑALES TÉCNICAS

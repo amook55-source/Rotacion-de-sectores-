@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. Estilos CSS Globales y Específicos para Balances
+# 2. Estilos CSS Globales (Tema Neón Oscuro)
 st.markdown("""
 <style>
     .stApp {
@@ -54,7 +54,7 @@ st.markdown("""
         border: 1px solid #232D42 !important;
     }
     
-    /* Estilos exactos para las tarjetas de balances */
+    /* Estilos para Balances */
     .card-post {
         background-color: #120D1D;
         border: 1px solid #7C3AED;
@@ -69,26 +69,68 @@ st.markdown("""
         padding: 16px;
         margin-bottom: 12px;
     }
-    .badge-post {
-        color: #A78BFA;
-        font-weight: 600;
-        font-size: 0.9rem;
+    .badge-post { color: #A78BFA; font-weight: 600; font-size: 0.9rem; }
+    .badge-pre { color: #FBBF24; font-weight: 600; font-size: 0.9rem; }
+    .eps-val { color: #10B981; font-size: 1.3rem; font-weight: 700; text-align: right; }
+    .eps-lbl { color: #9CA3AF; font-size: 0.8rem; text-align: right; }
+
+    /* Estilos para Warren Score Cards */
+    .score-card {
+        background: linear-gradient(135deg, #131822 0%, #1A2130 100%);
+        border: 1px solid #1E293B;
+        border-left: 4px solid #00FF88;
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.4);
     }
-    .badge-pre {
-        color: #FBBF24;
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-    .eps-val {
-        color: #10B981;
-        font-size: 1.3rem;
+    .ticker-title { color: #FFFFFF; font-size: 1.5rem; font-weight: 700; margin: 0; }
+    .score-badge {
+        background-color: #052E16;
+        color: #00FF88;
+        border: 1px solid #059669;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 1.2rem;
         font-weight: 700;
-        text-align: right;
+        text-align: center;
     }
-    .eps-lbl {
-        color: #9CA3AF;
+    .pillar-box {
+        background-color: #0B0E14;
+        border: 1px solid #232D42;
+        border-radius: 6px;
+        padding: 6px;
+        text-align: center;
+        color: #94A3B8;
         font-size: 0.8rem;
-        text-align: right;
+    }
+    .pillar-val { color: #00FF88; font-weight: 700; font-size: 1rem; }
+
+    /* Estilos para Señales */
+    .signal-card {
+        background: linear-gradient(135deg, #131822 0%, #1A2130 100%);
+        border: 1px solid #232D42;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+    }
+    .signal-badge-bull {
+        background-color: #052E16;
+        color: #00FF88;
+        border: 1px solid #059669;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .signal-badge-bear {
+        background-color: #311218;
+        color: #FF3B69;
+        border: 1px solid #9F1239;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -104,7 +146,7 @@ tab_resumen, tab_score, tab_senales, tab_balances, tab_rotacion = st.tabs([
     "🌀 Rotación"
 ])
 
-# Universo de Tickers Ampliado
+# Universo de Tickers
 TICKERS_UNIVERSO = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "AVGO", "AMD", "ORCL", "CRM", 
     "INTC", "QCOM", "IBM", "XOM", "CVX", "COP", "SLB", "BP", "JNJ", "PFE", 
@@ -149,15 +191,15 @@ def cargar_datos_completos(tickers):
             except Exception:
                 continue
                 
-        vix_val = float(data["^VIX"].dropna().iloc[-1]) if "^VIX" in data else 18.5
+        vix_val = float(data["^VIX"].dropna().iloc[-1]) if "^VIX" in data else 18.26
         return pd.DataFrame(resultados), vix_val
     except Exception:
-        return pd.DataFrame(), 18.5
+        return pd.DataFrame(), 18.26
 
 df_mercado, valor_vix = cargar_datos_completos(TICKERS_UNIVERSO)
 
 # ==========================================
-# 1. RESUMEN & RÉGIMEN
+# 1. RESUMEN & RÉGIMEN (CON GRÁFICO DE AGUJA)
 # ==========================================
 with tab_resumen:
     st.header("📊 Régimen de Mercado & Exposición")
@@ -168,95 +210,130 @@ with tab_resumen:
         score_regimen = int((pct_ema200 * 0.5) + ((30 - valor_vix) * 1.5))
         score_regimen = max(0, min(100, score_regimen))
         
-        col_reg1, col_reg2 = st.columns(2)
+        col_reg1, col_reg2 = st.columns([1, 1])
+        
         with col_reg1:
-            st.metric("Índice de Régimen General", f"{score_regimen} / 100")
-            st.metric("Índice VIX", f"{valor_vix:.2f}")
+            st.markdown("### 🎛️ Índice de Régimen General")
+            color_gauge = "#FF3B69" if score_regimen < 40 else ("#FFB800" if score_regimen < 60 else "#00FF88")
+            
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=score_regimen,
+                number={'suffix': " / 100", 'font': {'color': color_gauge, 'size': 38}},
+                gauge={
+                    'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#334155"},
+                    'bar': {'color': color_gauge, 'thickness': 0.3},
+                    'bgcolor': "#131822",
+                    'borderwidth': 1,
+                    'bordercolor': "#232D42",
+                    'steps': [
+                        {'range': [0, 40], 'color': '#2A121B'},
+                        {'range': [40, 60], 'color': '#2A2612'},
+                        {'range': [60, 100], 'color': '#122A1E'}
+                    ],
+                }
+            ))
+            fig_gauge.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#E2E8F0'),
+                height=260,
+                margin=dict(l=20, r=20, t=10, b=10)
+            )
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
         with col_reg2:
+            st.markdown("### 💡 Diagnóstico del Mercado")
+            st.metric("Índice VIX (Volatilidad)", f"{valor_vix:.2f}")
+            st.metric("Acciones sobre EMA200", f"{alcistas} de {total} ({pct_ema200:.1f}%)")
+            
             if score_regimen < 40:
-                st.error("⚠️ **Mercado Defensivo**: Exposición sugerida 25% - 50%.")
+                st.error("⚠️ **Mercado Defensivo**: Exposición sugerida 25% - 50%. Posiciones chicas y stops cortos.")
+            elif score_regimen < 60:
+                st.warning("⚠️ **Mercado Neutral**: Exposición sugerida 50% - 75%. Operar selectivamente.")
             else:
-                st.success("🚀 **Mercado Favorable**: Exposición sugerida 75% - 100%.")
+                st.success("🚀 **Mercado Favorable**: Exposición sugerida 75% - 100%. Acompañar la tendencia.")
 
 # ==========================================
-# 2. WARREN SCORE
+# 2. WARREN SCORE (TARJETAS DINÁMICAS)
 # ==========================================
 with tab_score:
-    st.header("🎯 Warren Score & Pilares")
+    st.header("🎯 Podio del Warren Score")
+    st.caption("Los papeles con mayor puntaje compuesto según tendencia, fuerza, contracción y setup.")
+
     if not df_mercado.empty:
         df_score_sorted = df_mercado.sort_values(by="WarrenScore", ascending=False).reset_index(drop=True)
-        tabla_mostrar = df_score_sorted.head(15).copy()
-        tabla_mostrar.index += 1
-        tabla_mostrar.rename(columns={"WarrenScore": "SCORE", "Tendencia": "TEND.", "Fuerza": "FUERZA", "Contraccion": "CONTR.", "Setup": "SETUP"}, inplace=True)
-        st.dataframe(tabla_mostrar[["Ticker", "SCORE", "TEND.", "FUERZA", "CONTR.", "SETUP"]], use_container_width=True)
+        
+        for idx, row in df_score_sorted.head(10).iterrows():
+            posicion = idx + 1
+            card_html = f"""
+            <div class="score-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span style="color: #64748B; font-weight: 700; font-size: 1.2rem;">#{posicion}</span>
+                        <div>
+                            <div class="ticker-title">{row['Ticker']}</div>
+                            <div style="color: #64748B; font-size: 0.85rem;">Precio: ${row['Precio']:.2f} &nbsp;|&nbsp; Var: <span style="color: {'#00FF88' if row['Variacion'] >= 0 else '#FF3B69'};">{row['Variacion']:+.2f}%</span></div>
+                        </div>
+                    </div>
+                    <div class="score-badge">
+                        {row['WarrenScore']} <span style="font-size: 0.7rem; color: #94A3B8;">pts</span>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px;">
+                    <div class="pillar-box">TEND.<br><span class="pillar-val">{row['Tendencia']} / 20</span></div>
+                    <div class="pillar-box">FUERZA<br><span class="pillar-val">{row['Fuerza']} / 25</span></div>
+                    <div class="pillar-box">CONTR.<br><span class="pillar-val">{row['Contraccion']} / 35</span></div>
+                    <div class="pillar-box">SETUP<br><span class="pillar-val">{row['Setup']} / 20</span></div>
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
 
 # ==========================================
 # 3. SEÑALES TÉCNICAS
 # ==========================================
 with tab_senales:
     st.header("⚡ Detector de Señales Técnicas")
-    st.info("Monitoreo activo de cruces EMA200, RSI y MACD.")
+    st.caption("Filtro en tiempo real de rebotes en medias clave y cruces de momentum.")
 
-# ==========================================
-# 4. CALENDARIO DE BALANCES (EARNINGS)
-# ==========================================
-with tab_balances:
-    st.subheader("📅 Resultados Corporativos de la Semana")
-    st.caption("Resultados corporativos organizados por día con buscador rápido de tickers.")
+    col_sig1, col_sig2 = st.columns(2)
 
-    # Buscador de ticker
-    ticker_buscado = st.text_input("🔍 Buscar ticker específico (ej. META, TSLA, AAPL):", "").strip().upper()
-
-    dias_earnings = {
-        "🗓️ Miércoles 21 de Octubre (5 empresas)": [
-            {"ticker": "META", "momento": "Cierre (Post)", "tipo": "post", "eps": "$4.98"},
-            {"ticker": "TSLA", "momento": "Cierre (Post)", "tipo": "post", "eps": "$0.22"},
-            {"ticker": "LRCX", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.17"},
-            {"ticker": "PM", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.30"},
-            {"ticker": "IBM", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.88"}
-        ]
-    }
-
-    for dia_label, lista_empresas in dias_earnings.items():
-        if ticker_buscado:
-            lista_filtrada = [e for e in lista_empresas if ticker_buscado in e["ticker"]]
-        else:
-            lista_filtrada = lista_empresas
-
-        if lista_filtrada:
-            with st.expander(dia_label, expanded=True):
-                for emp in lista_filtrada:
-                    clase_card = "card-post" if emp["tipo"] == "post" else "card-pre"
-                    clase_badge = "badge-post" if emp["tipo"] == "post" else "badge-pre"
-                    icono = "🟣" if emp["tipo"] == "post" else "🟠"
-
-                    html_card = f"""
-                    <div class="{clase_card}">
+    with col_sig1:
+        st.subheader("🎯 Cerca / Rebote en EMA200")
+        if not df_mercado.empty:
+            df_ema_cerca = df_mercado[abs((df_mercado["Precio"] - df_mercado["EMA200"]) / df_mercado["EMA200"]) <= 0.03].copy()
+            if not df_ema_cerca.empty:
+                for _, row in df_ema_cerca.iterrows():
+                    dist_pct = ((row['Precio'] - row['EMA200']) / row['EMA200']) * 100
+                    badge_cls = "signal-badge-bull" if dist_pct >= 0 else "signal-badge-bear"
+                    estado_txt = "🟢 Sobre EMA200" if dist_pct >= 0 else "🔴 Bajo EMA200"
+                    
+                    st.markdown(f"""
+                    <div class="signal-card">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <h2 style="margin: 0; color: #FFFFFF; font-size: 1.8rem; font-weight: 700;">{emp['ticker']}</h2>
-                                <span class="{clase_badge}">{icono} {emp['momento']}</span>
+                                <strong style="font-size: 1.2rem; color: #FFF;">{row['Ticker']}</strong>
+                                <span style="color: #94A3B8; font-size: 0.85rem; margin-left: 10px;">${row['Precio']:.2f}</span>
                             </div>
                             <div>
-                                <div class="eps-lbl">EPS Estimado</div>
-                                <div class="eps-val">{emp['eps']}</div>
+                                <span class="{badge_cls}">{estado_txt} ({dist_pct:+.1f}%)</span>
                             </div>
                         </div>
                     </div>
-                    """
-                    st.markdown(html_card, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No hay activos testeando la EMA200 en este momento.")
 
-# ==========================================
-# 5. ROTACIÓN SECTORIAL
-# ==========================================
-with tab_rotacion:
-    st.header("🌀 Cuadrantes de Rotación Sectorial")
-    sectors_data = pd.DataFrame({
-        'Sector': ['XLK (Tech)', 'XLE (Energía)', 'XLP (Consumo Def.)', 'XLV (Salud)', 'XLI (Industrial)'],
-        'Fuerza_Relativa': [-1.2, 1.9, 1.4, 1.6, -0.5],
-        'Momentum': [-1.5, 1.2, 2.1, 1.3, -0.2]
-    })
-    fig_rrg = px.scatter(sectors_data, x='Fuerza_Relativa', y='Momentum', text='Sector', color='Sector', color_discrete_sequence=["#FF3B69", "#00FF88", "#FFB800", "#00E5FF", "#A855F7"])
-    fig_rrg.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#131822', font=dict(color='#E2E8F0'), height=500)
-    st.plotly_chart(fig_rrg, use_container_width=True)
+    with col_sig2:
+        st.subheader("📈 Cruces de Momentum")
+        if not df_mercado.empty:
+            top_momentum = df_mercado.sort_values(by="Fuerza", ascending=False).head(5)
+            for _, row in top_momentum.iterrows():
+                st.markdown(f"""
+                <div class="signal-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 1.2rem; color: #FFF;">{row['Ticker']}</strong>
+                            <span style="color: #94A3B8; font-size: 
                     

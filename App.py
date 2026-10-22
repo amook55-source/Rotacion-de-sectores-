@@ -335,5 +335,102 @@ with tab_senales:
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <strong style="font-size: 1.2rem; color: #FFF;">{row['Ticker']}</strong>
-                            <span style="color: #94A3B8; font-size: 
-                    
+                            <span style="color: #94A3B8; font-size: 0.85rem; margin-left: 10px;">Score Fuerza: {row['Fuerza']}/25</span>
+                        </div>
+                        <div>
+                            <span class="signal-badge-bull">⚡ Cruce Alcista MACD</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+# ==========================================
+# 4. CALENDARIO DE BALANCES (EARNINGS)
+# ==========================================
+with tab_balances:
+    st.subheader("📅 Resultados Corporativos de la Semana")
+    st.caption("Resultados corporativos organizados por día con buscador rápido de tickers.")
+
+    ticker_buscado = st.text_input("🔍 Buscar ticker específico (ej. META, TSLA, AAPL, AMZN, GOOGL):", "").strip().upper()
+
+    dias_earnings = {
+        "🗓️ Lunes 19 de Octubre (4 empresas)": [
+            {"ticker": "NFLX", "momento": "Cierre (Post)", "tipo": "post", "eps": "$5.40"},
+            {"ticker": "UAL", "momento": "Cierre (Post)", "tipo": "post", "eps": "-$2.10"},
+            {"ticker": "HAL", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$0.15"},
+            {"ticker": "JBHT", "momento": "Cierre (Post)", "tipo": "post", "eps": "$1.45"}
+        ],
+        "🗓️ Martes 20 de Octubre (6 empresas)": [
+            {"ticker": "JNJ", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.20"},
+            {"ticker": "PG", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$1.63"},
+            {"ticker": "TRV", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.90"},
+            {"ticker": "LMT", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$6.05"},
+            {"ticker": "SNAP", "momento": "Cierre (Post)", "tipo": "post", "eps": "-$0.05"},
+            {"ticker": "TXT", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$0.65"}
+        ],
+        "🗓️ Miércoles 21 de Octubre (5 empresas)": [
+            {"ticker": "META", "momento": "Cierre (Post)", "tipo": "post", "eps": "$4.98"},
+            {"ticker": "TSLA", "momento": "Cierre (Post)", "tipo": "post", "eps": "$0.22"},
+            {"ticker": "LRCX", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.17"},
+            {"ticker": "PM", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.30"},
+            {"ticker": "IBM", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.88"}
+        ],
+        "🗓️ Jueves 22 de Octubre (7 empresas)": [
+            {"ticker": "AAPL", "momento": "Cierre (Post)", "tipo": "post", "eps": "$1.25"},
+            {"ticker": "AMZN", "momento": "Cierre (Post)", "tipo": "post", "eps": "$7.38"},
+            {"ticker": "GOOGL", "momento": "Cierre (Post)", "tipo": "post", "eps": "$11.20"},
+            {"ticker": "MSFT", "momento": "Cierre (Post)", "tipo": "post", "eps": "$2.65"},
+            {"ticker": "INTC", "momento": "Cierre (Post)", "tipo": "post", "eps": "$1.10"},
+            {"ticker": "CMCSA", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$0.65"},
+            {"ticker": "UPS", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.25"}
+        ],
+        "🗓️ Viernes 23 de Octubre (3 empresas)": [
+            {"ticker": "XOM", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$0.20"},
+            {"ticker": "CVX", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$0.35"},
+            {"ticker": "ABBV", "momento": "Apertura (Pre)", "tipo": "pre", "eps": "$2.85"}
+        ]
+    }
+
+    for dia_label, lista_empresas in dias_earnings.items():
+        if ticker_buscado:
+            lista_filtrada = [e for e in lista_empresas if ticker_buscado in e["ticker"]]
+        else:
+            lista_filtrada = lista_empresas
+
+        if lista_filtrada:
+            with st.expander(dia_label, expanded=True):
+                for emp in lista_filtrada:
+                    clase_card = "card-post" if emp["tipo"] == "post" else "card-pre"
+                    clase_badge = "badge-post" if emp["tipo"] == "post" else "badge-pre"
+                    icono = "🟣" if emp["tipo"] == "post" else "🟠"
+
+                    html_card = f"""
+                    <div class="{clase_card}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h2 style="margin: 0; color: #FFFFFF; font-size: 1.8rem; font-weight: 700;">{emp['ticker']}</h2>
+                                <span class="{clase_badge}">{icono} {emp['momento']}</span>
+                            </div>
+                            <div>
+                                <div class="eps-lbl">EPS Estimado</div>
+                                <div class="eps-val">{emp['eps']}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(html_card, unsafe_allow_html=True)
+
+# ==========================================
+# 5. ROTACIÓN SECTORIAL
+# ==========================================
+with tab_rotacion:
+    st.header("🌀 Cuadrantes de Rotación Sectorial")
+    sectors_data = pd.DataFrame({
+        'Sector': ['XLK (Tech)', 'XLE (Energía)', 'XLP (Consumo Def.)', 'XLV (Salud)', 'XLI (Industrial)'],
+        'Fuerza_Relativa': [-1.2, 1.9, 1.4, 1.6, -0.5],
+        'Momentum': [-1.5, 1.2, 2.1, 1.3, -0.2]
+    })
+    fig_rrg = px.scatter(sectors_data, x='Fuerza_Relativa', y='Momentum', text='Sector', color='Sector', color_discrete_sequence=["#FF3B69", "#00FF88", "#FFB800", "#00E5FF", "#A855F7"])
+    fig_rrg.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#131822', font=dict(color='#E2E8F0'), height=500)
+    st.plotly_chart(fig_rrg, use_container_width=True)
+                
